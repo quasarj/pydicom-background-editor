@@ -225,7 +225,7 @@ def parse_path(path):
 
     return output
 
-def traverse_path(ds, parsed_path):
+def traverse_path(ds, parsed_path) -> list:
     """
     Traverse a path and return the matching elements
     
@@ -236,11 +236,19 @@ def traverse_path(ds, parsed_path):
     if len(parsed_path) == 0:
         return [ds]
 
+    if ds is None:
+        return []
+
     item, *remaning_path = parsed_path
 
     if isinstance(item, Segment):
         # Traverse the DICOM dataset using the segment
-        ds = ds.get((item.group, item.element))
+
+        if item.is_private:
+            private_block = ds.private_block(item.group, item.owner, create=False)
+            ds = ds.get(private_block.get_tag(item.element))
+        else:
+            ds = ds.get((item.group, item.element))
         return traverse_path(ds, remaning_path)
 
     elif isinstance(item, Sequence):
@@ -263,6 +271,8 @@ def traverse_path(ds, parsed_path):
                 # print(">>", x)
                 ret.extend(x)
             return ret
+
+    return []
 
 
 def main():
