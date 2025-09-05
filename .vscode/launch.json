@@ -5,17 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python: Module Test",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Python: Current File (uv venv)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
+            "module": "pydicom_background_editor.main",
             "console": "integratedTerminal",
             "python": "${workspaceFolder}/.venv/bin/python" // Adjust path if your uv venv is elsewhere
         },

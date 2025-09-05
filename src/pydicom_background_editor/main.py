@@ -143,21 +143,36 @@
 from collections import defaultdict
 import csv
 from pprint import pprint
+from pathlib import Path
+import argparse
 
+# Use a package-relative import so the module works when installed/imported
 from .editor import Operation
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
+    """CLI entrypoint: read CSV of edits and group them by Series Instance UID.
+
+    Args:
+        argv: Optional list of command-line arguments (for testing).
+    """
+    parser = argparse.ArgumentParser(prog="pydicom-background-editor")
+    parser.add_argument("input", nargs="?", default="short.csv", help="Input CSV file with edits")
+    args = parser.parse_args(argv)
+
+    input_path = Path(args.input)
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+
     required_fields = [
-        'series_instance_uid',
-        'op',
-        'tag',
-        'val1',
-        'val2',
+        "series_instance_uid",
+        "op",
+        "tag",
+        "val1",
+        "val2",
     ]
-    # input_filename = "background_editor_example_input2.csv"
-    input_filename = "short.csv"
-    with open(input_filename) as infile:
+
+    with input_path.open("r", newline="") as infile:
         reader = csv.DictReader(infile)
 
         # make sure we have the required fields
@@ -176,26 +191,28 @@ def main():
             print(s)
             pprint(o)
 
+
 def generate_edit_groups(reader):
-        series_list = []
-        op_list = []
-        last_type = None
-        for row in reader:
-            if row['series_instance_uid']:
-                # if this is the end of a set
-                if last_type == 'op':
-                    yield series_list, op_list
-                    series_list = []
-                    op_list = []
+    series_list = []
+    op_list = []
+    last_type = None
+    for row in reader:
+        if row["series_instance_uid"]:
+            # if this is the end of a set
+            if last_type == "op":
+                yield series_list, op_list
+                series_list = []
+                op_list = []
 
-                series_list.append(row['series_instance_uid'])
-                last_type = 'series'
-            else:
-                op_list.append(Operation.from_csv_row(row))
-                last_type = 'op'
+            series_list.append(row["series_instance_uid"])
+            last_type = "series"
+        else:
+            op_list.append(Operation.from_csv_row(row))
+            last_type = "op"
 
-        if series_list or op_list:
-            yield series_list, op_list
+    if series_list or op_list:
+        yield series_list, op_list
+
 
 if __name__ == "__main__":
     main()
