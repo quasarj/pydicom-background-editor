@@ -1,7 +1,7 @@
 {
     "python.analysis.extraPaths": [
         "./src",
-        "./src/pydicom_background_"
+        "./src/pydicom_background_editor"
     ],
     "python.testing.pytestArgs": [
         "tests"

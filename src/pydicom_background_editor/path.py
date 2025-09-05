@@ -1,5 +1,6 @@
 import dataclasses
 import re
+from pydicom import Dataset
 
 
 @dataclasses.dataclass
@@ -40,7 +41,11 @@ class Sequence:
             self.value = int(value)
 
 
-def parse(path):
+class Path(list):
+    pass
+
+
+def parse(path: str) -> Path:
     if not (path.startswith("<") and path.endswith(">")):
         raise ValueError("Path is missing Bills; it looks invalid")
 
@@ -64,10 +69,10 @@ def parse(path):
             s = Sequence(sequence)
             output.append(s)
 
-    return output
+    return Path(output)
 
 
-def traverse(ds, parsed_path) -> list:
+def traverse(ds: Dataset, parsed_path: Path) -> list:
     """
     Traverse a path and return the matching elements
 
@@ -77,33 +82,36 @@ def traverse(ds, parsed_path) -> list:
     """
     return _traverse_path(ds, ds, parsed_path)
 
-
-def _traverse_path(ds, base_ds, parsed_path) -> list:
+# TODO: we need to keep track of the entire chain of datasets, not just the base one, I think
+# in order to be able to check them all for the closest private creator block above
+# the current one
+def _traverse_path(ds: Dataset, base_ds: Dataset, parsed_path: Path) -> list:
     if len(parsed_path) == 0:
         return [ds]
 
     if ds is None:
         return []
 
-    item, *remaning_path = parsed_path
+    item, *remaining_path = parsed_path
+    remaining_path = Path(remaining_path)
 
     if isinstance(item, Segment):
         # Traverse the DICOM dataset using the segment
 
         if item.is_private:
             try:
-                private_block = ds.private_block(item.group, item.owner, create=False)
+                private_block = ds.private_block(item.group, item.owner or "", create=False)
             except KeyError:
                 # for some reason, the private creator block can be defined
                 # either in at the base of the dataset, or nested
                 private_block = base_ds.private_block(
-                    item.group, item.owner, create=False
+                    item.group, item.owner or "", create=False
                 )
 
-            ds = ds.get(private_block.get_tag(item.element))
+            ds = ds.get(private_block.get_tag(item.element)) # type: ignore
         else:
-            ds = ds.get((item.group, item.element))
-        return _traverse_path(ds, base_ds, remaning_path)
+            ds = ds.get((item.group, item.element)) # type: ignore
+        return _traverse_path(ds, base_ds, remaining_path)
 
     elif isinstance(item, Sequence):
         # Handle sequences
@@ -116,12 +124,12 @@ def _traverse_path(ds, base_ds, parsed_path) -> list:
             if exact_index >= seq_length:
                 return []
             ds = seq[exact_index]
-            return _traverse_path(ds, base_ds, remaning_path)
+            return _traverse_path(ds, base_ds, remaining_path)
         else:
             # wildcard index, we have to recurse for each entry
             ret = []
             for i in range(seq_length):
-                x = _traverse_path(seq[i], base_ds, remaning_path)
+                x = _traverse_path(seq[i], base_ds, remaining_path)
                 # print(">>", x)
                 ret.extend(x)
             return ret

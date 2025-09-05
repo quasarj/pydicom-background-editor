@@ -12,8 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pydicom-background-editor = "pydicom_background_editor:main"
-main = "pydicom_background_editor:main"
+main = "pydicom_background_editor.main:main"
 
 [build-system]
 requires = ["hatchling"]

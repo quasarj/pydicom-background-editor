@@ -1,5 +1,4 @@
 from pydicom_background_editor.path import parse, traverse, Segment, Sequence
-from pprint import pprint
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as PydicomSequence
 from pydicom.tag import Tag
