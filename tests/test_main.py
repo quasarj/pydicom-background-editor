@@ -1,9 +1,4 @@
-import io
-import csv
-import pydicom
-import pytest
-import pydicom_background_editor
-from pydicom_background_editor.main import parse_path, traverse_path, Segment, Sequence
+from pydicom_background_editor.path import parse, traverse, Segment, Sequence
 from pprint import pprint
 from pydicom.dataset import Dataset
 from pydicom.sequence import Sequence as PydicomSequence
@@ -17,6 +12,7 @@ def make_test_dataset():
     # Basic attributes
     ds.PatientName = "Test^Patient"
     ds.StudyInstanceUID = "1.2.840.12345.1"
+    ds.ImageType = r"ORIGINAL\PRIMARY\AXIAL"
 
     # Private creator (0029,0010) for the group 0x0029
     ds.add_new(Tag(0x0029, 0x0010), 'LO', "INTELERAD MEDICAL SYSTEMS")
@@ -65,8 +61,10 @@ def make_test_dataset():
     # Add an additional item under the private group to demonstrate mixing private/public
     extra_priv_item = Dataset()
     # a private element inside an item (same private creator block)
+    extra_priv_item.add_new(Tag(0x0029, 0x0010), 'LO', "NEW CREATOR")
     extra_priv_item.add_new(Tag(0x0029, 0x1021), 'LO', "PRIVATE_VALUE_21")
-    seq_extra = PydicomSequence([extra_priv_item])
+
+    seq_extra = PydicomSequence([extra_priv_item] * 2)
     ds.add_new(Tag(0x6000, 0x0010), 'SQ', seq_extra)  # arbitrary additional sequence
 
     return ds
@@ -77,14 +75,14 @@ def test_ds():
 
 def test_things():
     ds = make_test_dataset()
-    res = traverse_path(ds, parse_path("<(6001,0010)[0]>"))
+    res = traverse(ds, parse("<(6001,0010)[0]>"))
     print(res)
 
 
 def test_parse_path_simple_segment():
     """Test parsing of a simple DICOM path segment."""
     simple_path_segment = "<(0008,1110)>"
-    parsed = parse_path(simple_path_segment)
+    parsed = parse(simple_path_segment)
 
     assert len(parsed) == 1
     seg = parsed[0]
@@ -96,7 +94,7 @@ def test_parse_path_simple_segment():
 def test_parse_path_concrete_index():
     """Tests parsing of a DICOM path segment with a concrete index."""
     element = "<(0008,1110)[1]>"
-    parsed = parse_path(element)
+    parsed = parse(element)
 
     assert len(parsed) == 2
     one, two = parsed
@@ -113,7 +111,7 @@ def test_parse_path_concrete_index():
 def test_parse_path_wildcard_index():
     """Tests parsing of a DICOM path segment with a wildcard index."""
     element = "<(0008,1110)[<0>]>"
-    parsed = parse_path(element)
+    parsed = parse(element)
 
     assert len(parsed) == 2
     one, two = parsed
@@ -133,7 +131,7 @@ def test_parse_path_private_simple():
     """Tests parsing of a simple private path element"""
 
     element = '<(0029,"INTELERAD MEDICAL SYSTEMS",20)>'
-    parsed = parse_path(element)
+    parsed = parse(element)
 
     assert len(parsed) == 1
     seg = parsed[0]
@@ -149,7 +147,7 @@ def test_parse_path_complex_mixed():
     """Tests parsing of a complex path with mixed wildcard and concrete indexes"""
 
     element = '<(0008,1110)[3](0008,1155)[<1>](0008,1125)[<2>](0023,0010)[9](0029,"QUASAR",13)">'
-    parsed = parse_path(element)
+    parsed = parse(element)
 
     assert len(parsed) == 9
     one, two, three, four, five, six, seven, eight, nine = parsed
@@ -205,8 +203,8 @@ def test_traverse_path_missing_initial_tag():
     ds = make_test_dataset()
 
     path = "<(1234,0000)[90]>"
-    parsed = parse_path(path)
-    res = traverse_path(ds, parsed)
+    parsed = parse(path)
+    res = traverse(ds, parsed)
     assert len(res) == 0
 
 def test_traverse_path_missing_seq():
@@ -214,8 +212,8 @@ def test_traverse_path_missing_seq():
 
     ds = make_test_dataset()
     path = "<(5200,9230)[325](0008,9124)[2](0008,2112)[0](0040,a170)[0](0008,0100)>"
-    parsed = parse_path(path)
-    res = traverse_path(ds, parsed)
+    parsed = parse(path)
+    res = traverse(ds, parsed)
     assert len(res) == 0
 
 def test_traverse_path_missing_nested_tag():
@@ -223,8 +221,8 @@ def test_traverse_path_missing_nested_tag():
 
     ds = make_test_dataset()
     path = "<(5200,9230)[325](0008,9124)[0](0008,9999)[0](0040,a170)[0](0008,0100)>"
-    parsed = parse_path(path)
-    res = traverse_path(ds, parsed)
+    parsed = parse(path)
+    res = traverse(ds, parsed)
     assert len(res) == 0
 
 def test_traverse_path_simple():
@@ -232,9 +230,9 @@ def test_traverse_path_simple():
 
     path = "<(5200,9230)[0](0008,9124)[0](0008,2112)[0](0040,a170)[0](0008,0100)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     assert len(res) == 1
     assert res[0].value == '121322'
@@ -244,9 +242,9 @@ def test_traverse_path_wild1():
 
     path = "<(0008,1115)[<0>](0008,114a)[<0>](0008,1150)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     assert len(res) == 100
     assert res[0].value == '1.2.840.10008.5.1.4.1.1.128'
@@ -254,11 +252,11 @@ def test_traverse_path_wild1():
 def test_traverse_path_wild2():
     ds = make_test_dataset()
 
-    path = "<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"
+    path = "<(5200,9230)[<0>](0008,9124)[<1>](0008,2112)[<2>](0040,a170)[<3>](0008,0100)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     assert len(res) == 1000
     assert res[0].value == '121322'
@@ -268,9 +266,9 @@ def test_traverse_private():
 
     path = "<(0013,\"CTP\",11)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     assert len(res) == 1
     assert res[0].value == 'TCIA-Fake-Site'
@@ -278,14 +276,15 @@ def test_traverse_private():
 def test_traverse_private_nested():
     ds = make_test_dataset()
 
-    path = "<(6000,0010)>[<0>](0029,\"INTELERAD MEDICAL SYSTEMS\",21)>"
+    # path = "<(6000,0010)>[<0>](0029,\"INTELERAD MEDICAL SYSTEMS\",21)>"
+    path = "<(6000,0010)>[<0>](0029,\"NEW CREATOR\",21)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
-    assert len(res) == 1
-    assert res[0].value == 'TCIA-Fake-Site'
+    assert len(res) == 2
+    assert res[0].value == 'PRIVATE_VALUE_21'
 
     
 def test_edit():
@@ -293,16 +292,16 @@ def test_edit():
 
     path = "<(0013,\"CTP\",11)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     ele, *none = res
     
     ele.value = "Some New Value"
 
     # now do a second lookup
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     ele, *none = res
 
@@ -313,22 +312,23 @@ def test_edit_2():
 
     path = "<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"
 
-    parsed = parse_path(path)
+    parsed = parse(path)
 
-    res = traverse_path(ds, parsed)
+    res = traverse(ds, parsed)
 
     assert len(res) == 1000
     assert res[0].value == '121322'
 
     for ele in res:
+        ele.VR = 'UI'
         ele.value = '122222'
 
         
     # test one of them
     path = "<(5200,9230)[0](0008,9124)[0](0008,2112)[4](0040,a170)[98](0008,0100)>"
-    parsed = parse_path(path)
-    res = traverse_path(ds, parsed)
+    parsed = parse(path)
+    res = traverse(ds, parsed)
 
     assert len(res) == 1
     assert res[0].value == '122222'
-    
+    assert res[0].VR == 'UI'
