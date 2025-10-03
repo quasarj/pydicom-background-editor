@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module Test",
+            "name": "Python: Main",
             "type": "debugpy",
             "request": "launch",
             "module": "pydicom_background_editor.main",

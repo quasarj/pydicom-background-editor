@@ -145,9 +145,9 @@ import csv
 from pprint import pprint
 from pathlib import Path
 import argparse
+import pydicom
 
-# Use a package-relative import so the module works when installed/imported
-from .editor import Operation
+from .editor import Editor, Operation
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -187,9 +187,15 @@ def main(argv: list[str] | None = None) -> None:
             for s in series:
                 edit_groups[s].extend(ops)
 
+        editor = Editor()
+        ds = pydicom.dcmread("files/seg.dcm")
         for s, o in edit_groups.items():
-            print(s)
-            pprint(o)
+            # print(s)
+            # pprint(o)
+            first_op = o[0] # just for testing
+            editor.apply_edits(ds, [first_op])
+
+            break
 
 
 def generate_edit_groups(reader):
