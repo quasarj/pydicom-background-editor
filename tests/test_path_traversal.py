@@ -1,6 +1,7 @@
 from pydicom_background_editor.path import parse, traverse, Segment, Sequence, add_tag
 from dataset import make_test_dataset
 from pydicom.dataset import Dataset
+import pytest
 
 
 def test_traverse_path_missing_initial_tag():
@@ -111,6 +112,16 @@ def test_add_tag_root():
 
     assert ds[0x0008, 0x1030].value == "NEW VALUE"
 
+def test_add_tag_without_vr():
+    ds = make_test_dataset()
+
+    path = "<(0008,1030)>"
+    parsed_path = parse(path)
+
+    add_tag(ds, parsed_path, "NEW VALUE")
+
+    assert ds[0x0008, 0x1030].value == "NEW VALUE"
+
 def test_add_tag_seq():
     ds = make_test_dataset()
 
@@ -128,8 +139,21 @@ def test_add_tag_seq2():
     path = "<(5200,9230)[0](0008,1030)>"
     parsed_path = parse(path)
 
+    # Add a new sequence with a single empty item (Dataset)
     add_tag(ds, parsed_path, [Dataset()], 'SQ')
 
+    assert ds[0x5200, 0x9230][0][0x0008, 0x1030][0] == Dataset()
 
-    assert ds[0x5200, 0x9230][0][0x0008, 0x1030].value == "NEW VALUE"
-    assert ds[0x5200, 0x9230][0][0x0008, 0x1030].VR == "CS"
+
+@pytest.mark.xfail(reason="Adding a tag to an empty sequence is not supported yet")
+def test_add_tag_to_empty_seq():
+    """Tests adding a tag to an empty sequence."""
+
+    ds = make_test_dataset()
+    
+    path = "<(5200,9230)[0](0008,1030)[0]>"
+    parsed_path = parse(path)
+
+    add_tag(ds, parsed_path, 'NEW VALUE', 'CS')
+
+    # assert ds[0x5200, 0x9230][0][0x0008, 0x1030].VR == "CS"

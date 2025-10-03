@@ -1,6 +1,6 @@
 import dataclasses
 from pydicom.dataset import Dataset
-from .path import traverse, parse
+from .path import traverse, parse, add_tag
 
 
 @dataclasses.dataclass
@@ -39,4 +39,4 @@ class Editor:
                 tag.value = op.val1
             if tag is None:
                 # the tag was not present in the dataset, so we must add it
-                pass
+                add_tag(ds, parsed_path, op.val1, 'UN')

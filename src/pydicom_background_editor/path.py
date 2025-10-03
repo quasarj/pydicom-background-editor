@@ -1,6 +1,6 @@
 import dataclasses
 import re
-from pydicom import Dataset
+from pydicom import Dataset, datadict
 
 
 @dataclasses.dataclass
@@ -45,14 +45,22 @@ class Path(list):
     pass
 
 
-def add_tag(ds: Dataset, parsed_path: Path, value: str, vr: str) -> None:
+def add_tag(ds: Dataset, parsed_path: Path, value: str, vr: str | None = None) -> None:
     """
     Assuming the final tag in the parsed_path does not actually exist,
     but that all other tags do exist, this method creates the missing
     tag and sets it to the value provided.
     """
+
     
     element_to_add = parsed_path.pop()
+
+    if vr is None:
+        dict_entry = datadict.get_entry([element_to_add.group, element_to_add.element])
+        if dict_entry is None:
+            raise ValueError(f"Cannot find VR for tag {element_to_add.tag}")
+
+        vr = dict_entry[0] if dict_entry is not None else None
 
     if len(parsed_path) == 0:
         # we are at the root level, no need to parse
