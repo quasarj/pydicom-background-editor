@@ -107,7 +107,7 @@ def test_add_tag_root():
     path = "<(0008,1030)>"
     parsed_path = parse(path)
 
-    add_tag(ds, parsed_path, "NEW VALUE")
+    add_tag(ds, parsed_path, "NEW VALUE", 'CS')
 
     assert ds[0x0008, 0x1030].value == "NEW VALUE"
 
