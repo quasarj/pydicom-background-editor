@@ -2,7 +2,13 @@
 # From the original background editor help:
 
 # Usage:
-# BackgroundEditorTp.pl <?bkgrnd_id?> <activity_id> "<edit_desciption>" <notify>
+# BackgroundEditor# Another horrible kludge allows remapping private blocks (e.g):
+#       0013
+#       This is specifically to support the op move_owner_block ("CTP", "10") (note arg is hex string, not number)
+
+import logging
+
+# The contents of the fields <tag>, <value1>, and <value2> may by enclosed in<?bkgrnd_id?> <activity_id> "<edit_desciption>" <notify>
 # or
 # BackgroundEditorTp.pl -h
 # Expects lines of the form:
@@ -156,6 +162,12 @@ def main(argv: list[str] | None = None) -> None:
     Args:
         argv: Optional list of command-line arguments (for testing).
     """
+    # Configure logging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
     parser = argparse.ArgumentParser(prog="pydicom-background-editor")
     parser.add_argument("input", nargs="?", default="short.csv", help="Input CSV file with edits")
     args = parser.parse_args(argv)

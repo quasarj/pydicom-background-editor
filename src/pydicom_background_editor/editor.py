@@ -1,7 +1,10 @@
 import dataclasses
+import logging
 from pydicom.dataset import Dataset
 from pydicom.multival import MultiValue
 from .path import traverse, parse, add_tag
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
@@ -34,7 +37,7 @@ class Editor:
         # use traverse_path to find the actual tag to edit
         parsed_path = parse(op.tag)
         tags = traverse(ds, parsed_path)
-        print(f"Setting tag {op.tag} to {op.val1}")
+        logger.debug(f"Setting tag {op.tag} to {op.val1}")
         for tag in tags:
             if tag is not None:
                 tag.value = op.val1
