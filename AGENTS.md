@@ -1,12 +1,12 @@
 # AGENTS.md
 
-This document is a quick, actionable guide for automated agents (and humans) working on this repository. It summarizes what the project does, how it’s structured, how to run and test it, and the typical tasks agents may perform.
+This document is a quick, actionable guide for automated agents (and humans) working on this repository. It summarizes what the project does, how it's structured, how to run and test it, and the typical tasks agents may perform.
 
 ## Project overview
 
 - Name: `pydicom-background-editor`
-- Goal: Apply scripted “background edits” to DICOM series using CSV-defined operations.
-- Core idea: A CSV describes a list of series and a list of operations (edits) to apply. The code parses DICOM “paths” that can traverse into nested Sequences and private blocks, finds matching elements, and applies operations like setting a tag value.
+- Goal: Apply scripted "background edits" to DICOM series using CSV-defined operations.
+- Core idea: A CSV describes a list of series and a list of operations (edits) to apply. The code parses DICOM "paths" that can traverse into nested Sequences and private blocks, finds matching elements, and applies operations like setting a tag value.
 
 ## Tech stack
 
@@ -23,11 +23,12 @@ This document is a quick, actionable guide for automated agents (and humans) wor
   - `editor.py` – defines `Operation` (a dataclass for CSV rows) and `Editor` with supported edit ops.
     - Implemented operation: `set_tag` (method `_op_set_tag`).
     - Uses path parsing/traversal to find or add elements and set their values.
-  - `path.py` – parser and traversal utilities for DICOM “paths”.
-    - `parse(path: str) -> Path`
-    - `traverse(ds: Dataset, parsed_path: Path) -> list`
-    - `add_tag(ds: Dataset, parsed_path: Path, value, vr: str | None = None)`
+  - `path.py` – parser and traversal utilities for DICOM "paths".
+    - `parse(path: str) -> Path` – parses a path string into a Path object (list of Segment/Sequence hops).
+    - `traverse(ds: Dataset, parsed_path: Path) -> list` – returns a list of matching DataElements.
+    - `add_tag(ds: Dataset, parsed_path: Path, value, vr: str | None = None)` – creates missing terminal element; if VR not provided, looks up in DICOM dictionary, raises ValueError if not found.
     - Supports private blocks via `(gggg,"OWNER",ee)` and sequence indices with concrete `[N]` or wildcard `[<N>]` hops.
+    - Note: Private creator blocks are searched first in the current dataset, then fall back to the base dataset if not found at the current level.
   - `main.py` – CLI entry point for reading a CSV and grouping edits by `series_instance_uid`.
     - Current stub applies just the first operation of each group to a sample file for demonstration.
 - `tests/`
@@ -41,6 +42,7 @@ This document is a quick, actionable guide for automated agents (and humans) wor
 
 - Entry points:
   - `uv run main`
+  - `python -m pydicom_background_editor.main`
   - Installed script alias: `main` (via `[project.scripts]`)
 - Arguments:
   - `input` (positional, optional; defaults to `short.csv`): CSV file with edits.
@@ -48,6 +50,7 @@ This document is a quick, actionable guide for automated agents (and humans) wor
   - Validates required columns.
   - Groups rows into (series list, operations list) chunks.
   - For each group, applies only the first operation to a sample `files/seg.dcm` (prototype behavior; extend as needed).
+  - **Limitation**: Currently breaks after processing the first series group (contains a `break` statement in the main loop).
 
 ## CSV format
 
@@ -84,13 +87,15 @@ Note: Excel-style meta quotes are common in source CSVs (angle brackets and doub
 
 Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
-- `set_tag`: Set the value of the target element; if the element is missing, `add_tag` is used to create it (defaulting VR to the dictionary value or `UN` if unknown).
+- `set_tag`: Set the value of the target element; if the element is missing, `add_tag` is used to create it. VR defaults to 'UN' when the tag is added and not found in the DICOM dictionary.
 
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
 - `delete_tag`, `empty_tag`, `string_replace`, `substitute`, `copy_from_tag`, `shift_date`, etc.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
+
+**Current implementation note**: The `set_tag` operation currently prints a debug message to stdout when setting a tag value. This should be removed or replaced with proper logging in production code.
 
 ## How to run
 
@@ -111,6 +116,8 @@ uv run pytest -q
 
 ```bash
 uv run main short.csv
+# Or using the installed script alias:
+main short.csv
 ```
 
 ## Agent playbook
@@ -166,9 +173,10 @@ Suggested steps:
 
 ## Quick reference
 
-- Public API: `Operation`, `parse`, `traverse`, `Editor.apply_edits`.
-- Entry point: `python -m pydicom_background_editor` (or `main`).
-- Example data: `files/seg.dcm`, `short.csv`, `background_editor_example_input*.csv`.
+- Public API: `Operation`, `parse`, `traverse` (exported via `__init__.py`).
+- Editor class: `Editor.apply_edits` (available via direct import).
+- Entry point: `python -m pydicom_background_editor.main` (or `main` or `uv run main`).
+- Example data: `files/seg.dcm`, `short.csv`, `background_editor_example_input.csv`, `background_editor_example_input2.csv`.
 
 ## Roadmap (suggested)
 
