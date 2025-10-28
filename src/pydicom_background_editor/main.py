@@ -204,10 +204,15 @@ def main(argv: list[str] | None = None) -> None:
         for s, o in edit_groups.items():
             # print(s)
             # pprint(o)
-            first_op = o[0] # just for testing
-            editor.apply_edits(ds, [first_op])
+
+            # first_op = o[0] # just for testing
+            # editor.apply_edits(ds, [first_op])
+
+            editor.apply_edits(ds, o)
 
             break
+
+        ds.save_as("files/output.dcm")
 
 
 def generate_edit_groups(reader):

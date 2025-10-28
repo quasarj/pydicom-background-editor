@@ -9,6 +9,49 @@ def test_ds():
     assert ds is not None
 
 
+def test_strip_metaquotes():
+    """Test that Operation._strip_metaquotes correctly removes angle brackets."""
+    # Basic case
+    assert Operation._strip_metaquotes("<value>") == "value"
+    
+    # Empty value
+    assert Operation._strip_metaquotes("<>") == ""
+    
+    # No brackets
+    assert Operation._strip_metaquotes("value") == "value"
+    
+    # Only one bracket
+    assert Operation._strip_metaquotes("<value") == "<value"
+    assert Operation._strip_metaquotes("value>") == "value>"
+    
+    # Empty string
+    assert Operation._strip_metaquotes("") == ""
+    
+    # Excel quirk: leading single quote
+    assert Operation._strip_metaquotes("'<value>") == "value"
+    
+    # Complex values
+    assert Operation._strip_metaquotes("<1.3.6.1.4.1.14519.5.2.1>") == "1.3.6.1.4.1.14519.5.2.1"
+    assert Operation._strip_metaquotes("<21113544>") == "21113544"
+
+
+def test_from_csv_row_strips_metaquotes():
+    """Test that Operation.from_csv_row strips metaquotes from val1 and val2."""
+    row = {
+        "op": "set_tag",
+        "tag": '<(0010,0010)>',
+        "val1": "<John Doe>",
+        "val2": "<>",
+    }
+    
+    op = Operation.from_csv_row(row)
+    
+    assert op.op == "set_tag"
+    assert op.tag == '<(0010,0010)>'  # tag is not stripped
+    assert op.val1 == "John Doe"  # brackets stripped
+    assert op.val2 == ""  # brackets stripped, leaving empty string
+
+
 def test_things():
     ds = make_test_dataset()
     res = traverse(ds, parse("<(6001,0010)[0]>"))

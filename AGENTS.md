@@ -184,3 +184,4 @@ Suggested steps:
 - Expand CLI to iterate real series files (by UID) and write outputs to a configurable destination.
 - Add basic typing and linting (optional: `mypy`, `ruff`).
 - Add docstrings and examples to README.
+- Fix issue with traverse function when processing private tags - the prviate creator block could be at any level above where the tag occurs.
