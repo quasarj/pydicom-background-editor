@@ -87,15 +87,17 @@ Note: Excel-style meta quotes are common in source CSVs (angle brackets and doub
 
 Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
-- `set_tag`: Set the value of the target element; if the element is missing, `add_tag` is used to create it. VR defaults to 'UN' when the tag is added and not found in the DICOM dictionary.
+- `set_tag`: Set the value of the target element; if the element is missing, `add_tag` is used to create it. VR defaults to 'UN' when the tag is added and not found in the DICOM dictionary. Values are automatically truncated to comply with DICOM VR length limits.
+
+- `string_replace`: Replace all occurrences of a substring (val1) with another string (val2) in the target tag's value. Works with both single-valued and multi-valued fields. If the tag doesn't exist, no action is taken (unlike `set_tag` which creates missing tags). Supports wildcard paths to operate on multiple matching elements.
+
+- `delete_tag`: Remove the specified tag from the dataset. Works with both concrete paths (single tag) and wildcard paths (multiple matching tags). If the tag doesn't exist, no error is raised.
 
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
-- `delete_tag`, `empty_tag`, `string_replace`, `substitute`, `copy_from_tag`, `shift_date`, etc.
+- `empty_tag`, `substitute`, `copy_from_tag`, `shift_date`, etc.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
-
-**Current implementation note**: The `set_tag` operation currently prints a debug message to stdout when setting a tag value. This should be removed or replaced with proper logging in production code.
 
 ## How to run
 

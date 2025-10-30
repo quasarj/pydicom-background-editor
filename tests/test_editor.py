@@ -322,3 +322,25 @@ def test_delete_tag_wildcard():
     # search for the deleted tag
     res = traverse(ds, parse(test_tag))
     assert all(tag.element is None for tag in res)
+
+def test_delete_tag_nonexistent():
+    """Test deleting a non-existent tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    test_tag = "<(0008,dead)>"
+
+    operations = [
+        Operation(
+            op="delete_tag",
+            tag=test_tag,
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # search for the deleted tag
+    res = traverse(ds, parse(test_tag))
+    assert all(tag.element is None for tag in res)
