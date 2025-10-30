@@ -92,6 +92,15 @@ class Editor:
             #execute op_function on self
             getattr(self, op_function)(ds, op)
 
+    def _op_delete_tag(self, ds: Dataset, op: Operation):
+        parsed_path = parse(op.tag)
+        tags = traverse(ds, parsed_path)
+        logger.debug(f"Deleting tag {op.tag}")
+
+        for tag in tags:
+            if tag.element is not None:
+                del tag.ds_chain[-1][tag.element.tag]
+
     def _op_set_tag(self, ds: Dataset, op: Operation):
         # use traverse_path to find the actual tag to edit
         parsed_path = parse(op.tag)
@@ -108,9 +117,9 @@ class Editor:
             new_value = truncate_value(op.val1, new_vr)
 
         for tag in tags:
-            if tag is not None:
-                tag.value = new_value
-            if tag is None:
+            if tag is not None and tag.element is not None:
+                tag.element.value = new_value
+            else:
                 # the tag was not present in the dataset, so we must add it
                 add_tag(ds, parsed_path, new_value, new_vr)
 
@@ -139,8 +148,8 @@ class Editor:
             current_vr = datadict.dictionary_VR([last_segment.group, last_segment.element]) # type: ignore
         
         for tag in tags:
-            if tag is not None:
-                current_value = tag.value
+            if tag.element is not None:
+                current_value = tag.element.value
                 if op.val1 not in str(current_value):
                     continue  # No occurrence to replace
                 
@@ -158,4 +167,4 @@ class Editor:
                     replaced_value = str(current_value).replace(op.val1, op.val2)
                     new_value = truncate_value(replaced_value, current_vr)
                 
-                tag.value = new_value
+                tag.element.value = new_value

@@ -44,7 +44,7 @@ def test_traverse_path_simple():
     res = traverse(ds, parsed)
 
     assert len(res) == 1
-    assert res[0].value == "121322"
+    assert res[0].element.value == "121322"
 
 
 def test_traverse_path_wild1():
@@ -57,7 +57,8 @@ def test_traverse_path_wild1():
     res = traverse(ds, parsed)
 
     assert len(res) == 100
-    assert res[0].value == "1.2.840.10008.5.1.4.1.1.128"
+    for i in range(100):
+        assert res[i][0].value == "1.2.840.10008.5.1.4.1.1.128"
 
 
 def test_traverse_path_wild2():
@@ -72,7 +73,7 @@ def test_traverse_path_wild2():
     res = traverse(ds, parsed)
 
     assert len(res) == 1000
-    assert res[0].value == "121322"
+    assert res[0][0].value == "121322"
 
 
 def test_traverse_private():
@@ -85,7 +86,7 @@ def test_traverse_private():
     res = traverse(ds, parsed)
 
     assert len(res) == 1
-    assert res[0].value == "TCIA-Fake-Site"
+    assert res[0][0].value == "TCIA-Fake-Site"
 
 
 def test_traverse_private_nested():
@@ -99,7 +100,7 @@ def test_traverse_private_nested():
     res = traverse(ds, parsed)
 
     assert len(res) == 2
-    assert res[0].value == "PRIVATE_VALUE_21"
+    assert res[0].element.value == "PRIVATE_VALUE_21"
 
 
 def test_add_tag_root():
@@ -145,6 +146,8 @@ def test_add_tag_seq2():
     assert ds[0x5200, 0x9230][0][0x0008, 0x1030][0] == Dataset()
 
 
+# NOTE: this might not ever be possible? we don't know what the tag
+# group,ele is in order to add it?
 @pytest.mark.xfail(reason="Adding a tag to an empty sequence is not supported yet")
 def test_add_tag_to_empty_seq():
     """Tests adding a tag to an empty sequence."""
@@ -157,3 +160,21 @@ def test_add_tag_to_empty_seq():
     add_tag(ds, parsed_path, 'NEW VALUE', 'CS')
 
     # assert ds[0x5200, 0x9230][0][0x0008, 0x1030].VR == "CS"
+
+    
+def test_parse_path_new():
+    """"""
+    ds = make_test_dataset()
+    
+    # path = "<(0008,1110)>"
+    path = "<(5200,9230)[0](0008,9124)[0](0008,2112)[0](0040,a170)[0](0008,0100)>"
+    parsed = parse(path)
+
+    t = traverse(ds, parsed)
+
+    # assert len(parsed) == 1
+    # seg = parsed[0]
+    # assert isinstance(seg, Segment)
+    # assert seg.tag == "0008,1110"
+    # assert seg.group == 0x0008
+    # assert seg.element == 0x1110

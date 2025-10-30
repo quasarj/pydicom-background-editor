@@ -83,14 +83,14 @@ def test_edit():
 
     ele, *none = res
 
-    ele.value = "Some New Value"
+    ele.element.value = "Some New Value"
 
     # now do a second lookup
     res = traverse(ds, parsed)
 
     ele, *none = res
 
-    assert ele.value == "Some New Value"
+    assert ele.element.value == "Some New Value"
 
 
 def test_edit_2():
@@ -105,11 +105,11 @@ def test_edit_2():
     res = traverse(ds, parsed)
 
     assert len(res) == 1000
-    assert res[0].value == "121322"
+    assert res[0].element.value == "121322"
 
     for ele in res:
-        ele.VR = "UI"
-        ele.value = "122222"
+        ele.element.VR = "UI"
+        ele.element.value = "122222"
 
     # test one of them
     path = "<(5200,9230)[0](0008,9124)[0](0008,2112)[4](0040,a170)[98](0008,0100)>"
@@ -117,9 +117,8 @@ def test_edit_2():
     res = traverse(ds, parsed)
 
     assert len(res) == 1
-    assert res[0].value == "122222"
-    assert res[0].VR == "UI"
-
+    assert res[0].element.value == "122222"
+    assert res[0].element.VR == "UI"
 
 def test_string_replace_simple():
     """Test basic string replacement on a simple tag."""
@@ -163,7 +162,7 @@ def test_string_replace_nested_sequence():
     # Verify the replacement
     res = traverse(ds, parse("<(0008,1115)[0](0008,114a)[0](0008,1150)>"))
     assert len(res) == 1
-    assert res[0].value == "1.2.999.99999.5.1.4.1.1.128"
+    assert res[0].element.value == "1.2.999.99999.5.1.4.1.1.128"
 
 
 def test_string_replace_wildcard():
@@ -187,7 +186,7 @@ def test_string_replace_wildcard():
     res = traverse(ds, parse("<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"))
     assert len(res) == 1000
     for elem in res:
-        assert elem.value == "999322"  # "121322" -> "999322"
+        assert elem.element.value == "999322"  # "121322" -> "999322"
 
 
 def test_string_replace_no_match():
@@ -221,7 +220,7 @@ def test_string_replace_missing_tag():
     operations = [
         Operation(
             op="string_replace",
-            tag="<(0099,9999)>",  # Non-existent tag
+            tag="<(0004,1202)>",  # Non-existent tag
             val1="anything",
             val2="replacement",
         )
@@ -231,8 +230,8 @@ def test_string_replace_missing_tag():
     editor.apply_edits(ds, operations)
 
     # Tag should still not exist
-    res = traverse(ds, parse("<(0099,9999)>"))
-    assert all(tag is None for tag in res)
+    res = traverse(ds, parse("<(0004,1202)>"))
+    assert all(tag.element is None for tag in res)
 
 
 def test_string_replace_multiple_occurrences():
@@ -278,4 +277,48 @@ def test_string_replace_private_tag():
 
     res = traverse(ds, parse('<(0013,"CTP",10)>'))
     assert len(res) == 1
-    assert res[0].value == "TCIA-Real-Project"
+    assert res[0].element.value == "TCIA-Real-Project"
+
+def test_delete_tag_simple():
+    """Test deleting an existing tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    test_tag = "<(0008,0008)>"  # ImageType
+
+    operations = [
+        Operation(
+            op="delete_tag",
+            tag=test_tag,
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # search for the deleted tag
+    res = traverse(ds, parse(test_tag))
+    assert all(tag.element is None for tag in res)
+
+def test_delete_tag_wildcard():
+    """Test deleting an existing tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    test_tag = "<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"
+
+    operations = [
+        Operation(
+            op="delete_tag",
+            tag=test_tag,
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # search for the deleted tag
+    res = traverse(ds, parse(test_tag))
+    assert all(tag.element is None for tag in res)

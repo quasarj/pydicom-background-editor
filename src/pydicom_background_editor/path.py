@@ -1,7 +1,14 @@
 import dataclasses
 import re
+import pydicom
+from pydicom.dataelem import DataElement
 from pydicom import Dataset, datadict
+from collections import namedtuple
+from typing import NamedTuple
 
+class ElementPair(NamedTuple):
+    element: Dataset
+    ds_chain: list[Dataset]
 
 @dataclasses.dataclass
 class Segment:
@@ -70,7 +77,7 @@ def add_tag(ds: Dataset, parsed_path: Path, value: str, vr: str | None = None) -
     # traverse to the parent of the element to add
     eles = traverse(ds, parsed_path)
     for ele in eles:
-        ele.add_new((element_to_add.group, element_to_add.element), vr, value)
+        ele.element.add_new((element_to_add.group, element_to_add.element), vr, value)
 
 
 def parse(path: str) -> Path:
@@ -100,7 +107,7 @@ def parse(path: str) -> Path:
     return Path(output)
 
 
-def traverse(ds: Dataset, parsed_path: Path) -> list:
+def traverse(ds: Dataset, parsed_path: Path) -> list[ElementPair]:
     """
     Traverse a path and return the matching elements
 
@@ -108,15 +115,18 @@ def traverse(ds: Dataset, parsed_path: Path) -> list:
     the same way Posda does - I _think_ they can be referenced
     the same way as DICOM Sequences?
     """
-    return _traverse_path(ds, ds, parsed_path)
+    return _traverse_path(ds, [ds], parsed_path)
 
 # TODO: we need to keep track of the entire chain of datasets, not just the base one, I think
 # in order to be able to check them all for the closest private creator block above
 # the current one
-def _traverse_path(ds: Dataset, base_ds: Dataset, parsed_path: Path) -> list:
+def _traverse_path(ds: Dataset, ds_chain: list[Dataset], parsed_path: Path) -> list[ElementPair]:
+    # This will be hit when we have reached the end of the path, or
+    # the path was empty to begin with
     if len(parsed_path) == 0:
-        return [ds]
+        return [ElementPair(ds, ds_chain)]
 
+    # This will be hit on a path where the node does not exist
     if ds is None:
         return []
 
@@ -132,14 +142,23 @@ def _traverse_path(ds: Dataset, base_ds: Dataset, parsed_path: Path) -> list:
             except KeyError:
                 # for some reason, the private creator block can be defined
                 # either in at the base of the dataset, or nested
-                private_block = base_ds.private_block(
+                # TODO: we might have to check every ds in the chain
+                private_block = ds_chain[0].private_block(
                     item.group, item.owner or "", create=False
                 )
 
             ds = ds.get(private_block.get_tag(item.element)) # type: ignore
         else:
             ds = ds.get((item.group, item.element)) # type: ignore
-        return _traverse_path(ds, base_ds, remaining_path)
+
+        if isinstance(ds, DataElement):
+            # if this ds is actually a DataElement, skip
+            # adding it to the ds_chain. This mainaly handles keeping
+            # Sequences out of the chain, ans well as the final element
+            extended_chain = ds_chain
+        else:
+            extended_chain = ds_chain + [ds]
+        return _traverse_path(ds, extended_chain, remaining_path)
 
     elif isinstance(item, Sequence):
         # Handle sequences
@@ -152,14 +171,13 @@ def _traverse_path(ds: Dataset, base_ds: Dataset, parsed_path: Path) -> list:
             if exact_index >= seq_length:
                 return []
             ds = seq[exact_index]
-            return _traverse_path(ds, base_ds, remaining_path)
+            return _traverse_path(ds, ds_chain + [ds], remaining_path)
         else:
             # wildcard index, we have to recurse for each entry
             ret = []
             for i in range(seq_length):
-                x = _traverse_path(seq[i], base_ds, remaining_path)
-                # print(">>", x)
+                x = _traverse_path(seq[i], ds_chain + [seq[i]], remaining_path)
                 ret.extend(x)
             return ret
 
-    return []
+    return [] # this should never be hit, but included for completeness

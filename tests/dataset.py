@@ -68,4 +68,5 @@ def make_test_dataset():
     seq_extra = PydicomSequence([extra_priv_item] * 2)
     ds.add_new(Tag(0x6000, 0x0010), 'SQ', seq_extra)  # arbitrary additional sequence
 
-    return ds
+    # Return a deep copy to ensure test isolation
+    return Dataset.from_json(ds.to_json_dict())
