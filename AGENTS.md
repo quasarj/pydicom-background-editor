@@ -93,9 +93,11 @@ Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
 - `delete_tag`: Remove the specified tag from the dataset. Works with both concrete paths (single tag) and wildcard paths (multiple matching tags). If the tag doesn't exist, no error is raised.
 
+- `empty_tag`: Set the target tag's value to an empty string. If the tag doesn't exist, it will be created with an empty value. Works with both concrete paths and wildcard paths to operate on multiple matching elements. Supports private tags.
+
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
-- `empty_tag`, `substitute`, `copy_from_tag`, `shift_date`, etc.
+- `substitute`, `copy_from_tag`, `shift_date`, etc.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
 

@@ -168,3 +168,32 @@ class Editor:
                     new_value = truncate_value(replaced_value, current_vr)
                 
                 tag.element.value = new_value
+
+    def _op_empty_tag(self, ds: Dataset, op: Operation):
+        """Set tag value to empty string.
+        
+        Traverses to the target tag(s) and sets their value to an empty string.
+        If the tag doesn't exist, it will be created with an empty value.
+        Works with both single tags and wildcard paths that match multiple elements.
+        
+        Args:
+            ds: The DICOM dataset to modify
+            op: Operation containing tag path (val1 and val2 are ignored)
+        """
+        parsed_path = parse(op.tag)
+        tags = traverse(ds, parsed_path)
+        logger.debug(f"Emptying tag {op.tag}")
+
+        last_segment = parsed_path[-1]
+
+        if last_segment.is_private:
+            new_vr = datadict.private_dictionary_VR([last_segment.group, last_segment.element], last_segment.owner) # type: ignore
+        else:
+            new_vr = datadict.dictionary_VR([last_segment.group, last_segment.element]) # type: ignore
+
+        for tag in tags:
+            if tag.element is not None:
+                tag.element.value = ""
+            else:
+                # the tag was not present in the dataset, so we must add it
+                add_tag(ds, parsed_path, "", new_vr)

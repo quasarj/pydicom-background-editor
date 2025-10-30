@@ -344,3 +344,122 @@ def test_delete_tag_nonexistent():
     # search for the deleted tag
     res = traverse(ds, parse(test_tag))
     assert all(tag.element is None for tag in res)
+
+
+def test_empty_tag_simple():
+    """Test emptying an existing tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set up a tag with a known value
+    ds.StudyInstanceUID = "1.3.6.1.4.1.14519.5.2.1.12345"
+
+    operations = [
+        Operation(
+            op="empty_tag",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.StudyInstanceUID == ""
+
+
+def test_empty_tag_nested_sequence():
+    """Test emptying a tag in a nested sequence with concrete index."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # The nested path has value "1.2.840.10008.5.1.4.1.1.128"
+    operations = [
+        Operation(
+            op="empty_tag",
+            tag="<(0008,1115)[0](0008,114a)[0](0008,1150)>",
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Verify the tag was emptied
+    res = traverse(ds, parse("<(0008,1115)[0](0008,114a)[0](0008,1150)>"))
+    assert len(res) == 1
+    assert res[0].element.value == ""
+
+
+def test_empty_tag_wildcard():
+    """Test emptying tags with wildcard traversal affecting multiple elements."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use wildcard to empty all matching elements
+    operations = [
+        Operation(
+            op="empty_tag",
+            tag="<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>",
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Check that all 1000 elements were emptied
+    res = traverse(ds, parse("<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"))
+    assert len(res) == 1000
+    for elem in res:
+        assert elem.element.value == ""
+
+
+def test_empty_tag_missing_creates():
+    """Test that empty_tag creates the tag if it doesn't exist."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use a tag that doesn't exist in the dataset
+    operations = [
+        Operation(
+            op="empty_tag",
+            tag="<(0010,0030)>",  # PatientBirthDate - doesn't exist in test dataset
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Tag should now exist with empty value
+    res = traverse(ds, parse("<(0010,0030)>"))
+    assert len(res) == 1
+    assert res[0].element is not None
+    assert res[0].element.value == ""
+
+
+def test_empty_tag_private():
+    """Test emptying a private tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Verify the tag has a value initially
+    res_before = traverse(ds, parse('<(0013,"CTP",10)>'))
+    assert len(res_before) == 1
+    assert res_before[0].element.value == "TCIA-Fake-Project"
+
+    operations = [
+        Operation(
+            op="empty_tag",
+            tag='<(0013,"CTP",10)>',
+            val1="",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    res = traverse(ds, parse('<(0013,"CTP",10)>'))
+    assert len(res) == 1
+    assert res[0].element.value == ""
