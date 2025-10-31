@@ -101,6 +101,8 @@ Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
 - `copy_from_tag`: Copy the value from a source tag (specified in val1) to the destination tag(s). If the source path matches multiple tags (via wildcards), the first matching tag's value is used. If the destination path matches multiple tags, all receive the same copied value. The value is converted to match the destination tag's VR (e.g., UI→LO, DA→DA). If the source tag doesn't exist, no action is taken. If the destination tag doesn't exist, it will be created. Raises ValueError if VR conversion is not possible. Supports both public and private tags.
 
+- `hash_unhashed_uid`: Hash UID values that don't already start with a specified root (val1). For each matching tag: if the value is empty/null, no change is made; if the value starts with the uid_root, no change is made (already hashed); otherwise, the value is hashed using `hash_uid()` and replaced. This operation is idempotent—running it multiple times produces the same result, making it safe for re-runs without changing already-hashed UIDs. Supports wildcard paths to operate on multiple matching elements. Note: The `hash_uid()` function is currently a stub and needs to be implemented with proper DICOM UID hashing logic.
+
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
 - Additional operations as needed.

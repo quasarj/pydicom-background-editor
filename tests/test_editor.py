@@ -1199,3 +1199,215 @@ def test_copy_from_tag_truncates_for_vr():
 
     # Value should be truncated to 16 chars
     assert len(ds.AccessionNumber) <= 16
+
+
+def test_hash_unhashed_uid_simple():
+    """Test hashing a UID that doesn't start with the root."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    original_uid = ds.StudyInstanceUID
+    uid_root = "9.9.9"
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1=uid_root,
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # UID should be changed and start with the root
+    assert ds.StudyInstanceUID != original_uid
+    assert ds.StudyInstanceUID.startswith(uid_root)
+
+
+def test_hash_unhashed_uid_already_hashed():
+    """Test that UIDs already starting with root are not re-hashed."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set UID to already have the root
+    uid_root = "9.9.9"
+    ds.StudyInstanceUID = f"{uid_root}.12345.67890"
+    original_uid = ds.StudyInstanceUID
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1=uid_root,
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # UID should remain unchanged
+    assert ds.StudyInstanceUID == original_uid
+
+
+def test_hash_unhashed_uid_empty_value():
+    """Test that empty UIDs are not modified."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set UID to empty string
+    ds.StudyInstanceUID = ""
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1="9.9.9",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # UID should remain empty
+    assert ds.StudyInstanceUID == ""
+
+
+def test_hash_unhashed_uid_wildcard():
+    """Test hashing multiple UIDs with wildcard."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # The nested UIDs currently have value "1.2.840.10008.5.1.4.1.1.128"
+    uid_root = "9.9.9"
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0008,1115)[<0>](0008,114a)[<0>](0008,1150)>",
+            val1=uid_root,
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # All matching UIDs should be hashed and start with root
+    res = traverse(ds, parse("<(0008,1115)[<0>](0008,114a)[<0>](0008,1150)>"))
+    assert len(res) == 100  # 100 items in the sequence
+    for elem in res:
+        assert elem.element.value.startswith(uid_root)
+        assert elem.element.value != "1.2.840.10008.5.1.4.1.1.128"
+
+
+def test_hash_unhashed_uid_mixed_already_hashed_and_unhashed():
+    """Test with mix of already-hashed and unhashed UIDs."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    uid_root = "9.9.9"
+    
+    # Set some UIDs to already be hashed, others not
+    # We'll use the nested sequence - set first 50 to already hashed, rest unhashed
+    res = traverse(ds, parse("<(0008,1115)[0](0008,114a)[<0>](0008,1150)>"))
+    for i, elem in enumerate(res[:50]):
+        elem.element.value = f"{uid_root}.1207885.{i}"
+    
+    # Store the first 50 "already hashed" values
+    already_hashed_values = [elem.element.value for elem in res[:50]]
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0008,1115)[0](0008,114a)[<0>](0008,1150)>",
+            val1=uid_root,
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Check results
+    res_after = traverse(ds, parse("<(0008,1115)[0](0008,114a)[<0>](0008,1150)>"))
+    
+    # First 50 should remain unchanged
+    for i, elem in enumerate(res_after[:50]):
+        assert elem.element.value == already_hashed_values[i]
+    
+    # Remaining should be hashed and start with root
+    for elem in res_after[50:]:
+        assert elem.element.value.startswith(uid_root)
+        assert elem.element.value != "1.2.840.10008.5.1.4.1.1.128"
+
+
+def test_hash_unhashed_uid_missing_tag():
+    """Test that missing tags are handled gracefully."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0008,9999)>",  # Non-existent tag
+            val1="9.9.9",
+            val2="",
+        )
+    ]
+
+    # Should not raise an error
+    editor.apply_edits(ds, operations)
+
+    # Tag should still not exist
+    res = traverse(ds, parse("<(0008,9999)>"))
+    assert all(tag.element is None for tag in res)
+
+
+def test_hash_unhashed_uid_empty_root():
+    """Test that empty uid_root is handled gracefully."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    original_uid = ds.StudyInstanceUID
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1="",  # Empty uid_root
+            val2="",
+        )
+    ]
+
+    # Should not raise an error
+    editor.apply_edits(ds, operations)
+
+    # UID should remain unchanged
+    assert ds.StudyInstanceUID == original_uid
+
+
+def test_hash_unhashed_uid_idempotent():
+    """Test that running hash_unhashed_uid twice produces same result."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    uid_root = "9.9.9"
+
+    operations = [
+        Operation(
+            op="hash_unhashed_uid",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1=uid_root,
+            val2="",
+        )
+    ]
+
+    # First hash
+    editor.apply_edits(ds, operations)
+    first_hash = ds.StudyInstanceUID
+
+    # Second hash - should not change
+    editor.apply_edits(ds, operations)
+    second_hash = ds.StudyInstanceUID
+
+    assert first_hash == second_hash
+    assert first_hash.startswith(uid_root)

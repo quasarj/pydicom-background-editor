@@ -1,4 +1,5 @@
 import dataclasses
+import hashlib
 import logging
 from pydicom import datadict
 from pydicom.dataset import Dataset
@@ -418,6 +419,64 @@ class Editor:
                 # Destination tag doesn't exist, create it
                 add_tag(ds, dest_parsed, converted_value, dest_vr)
 
+    def _op_hash_unhashed_uid(self, ds: Dataset, op: Operation):
+        """Hash UIDs that don't already start with the specified root.
+        
+        Traverses to the target tag(s) and checks each UID value:
+        - If the value is empty/null, no change is made
+        - If the value starts with the uid_root (val1), no change is made (already hashed)
+        - Otherwise, the value is hashed using hash_uid() and replaced
+        
+        This operation is useful for anonymizing UIDs while avoiding re-hashing UIDs
+        that have already been hashed (which would result in different values on re-runs).
+        
+        Works with both single tags and wildcard paths that match multiple elements.
+        
+        Args:
+            ds: The DICOM dataset to modify
+            op: Operation containing:
+                - tag: path to UID tag(s)
+                - val1: uid_root to use for hashing (and to check if already hashed)
+                - val2: unused
+        """
+        uid_root = op.val1
+        if not uid_root:
+            logger.warning(f"hash_unhashed_uid requires val1 to specify uid_root")
+            return
+        
+        parsed_path = parse(op.tag)
+        tags = traverse(ds, parsed_path)
+        
+        logger.debug(f"Hashing unhashed UIDs in {op.tag} with root {uid_root}")
+        
+        for tag in tags:
+            if tag.element is None:
+                continue
+            
+            current_value = tag.element.value
+            
+            # Check if value is empty or null
+            if not current_value or current_value == "":
+                logger.debug(f"Skipping empty UID at {tag.element.tag}")
+                continue
+            
+            # Convert to string for comparison
+            value_str = str(current_value)
+            
+            # Check if already hashed (starts with uid_root)
+            if value_str.startswith(uid_root):
+                logger.debug(f"UID {value_str} already starts with root {uid_root}, skipping")
+                continue
+            
+            # Hash the UID
+            try:
+                hashed_value = hash_uid(value_str, uid_root)
+                logger.debug(f"Hashing UID {value_str} -> {hashed_value}")
+                tag.element.value = hashed_value
+            except Exception as e:
+                logger.warning(f"Failed to hash UID '{value_str}': {e}")
+                continue
+
     def _convert_value_for_vr(self, value, source_vr: str, dest_vr: str):
         """Convert a value from one VR to another.
         
@@ -468,3 +527,22 @@ class Editor:
         # This may work for some cases but could fail
         logger.warning(f"Attempting generic conversion from VR {source_vr} to {dest_vr}")
         return truncate_value(value_str, dest_vr)
+
+
+def hash_uid(uid: str, uid_root: str) -> str:
+    """Hash a UID using the DICOM UID hash function.
+    
+    This is a stub function to be implemented by the user.
+    Should take a UID and a root, and return a hashed UID that starts with uid_root.
+    
+    Args:
+        uid: The UID to hash
+        uid_root: The root prefix for the hashed UID
+        
+    Returns:
+        A hashed UID beginning with uid_root
+    """
+
+    md5 = hashlib.md5(uid.encode(), usedforsecurity=False)
+    new_uid = f"{uid_root}.{int(md5.hexdigest(), 16)}"[:64]
+    return new_uid
