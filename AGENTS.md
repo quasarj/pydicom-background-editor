@@ -97,9 +97,11 @@ Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
 - `substitute`: Conditionally replace the tag's value with val2 only if the current value exactly matches val1. If the tag doesn't exist or the value doesn't match, no action is taken. Works with both single-valued and multi-valued fields. Supports wildcard paths to operate on multiple matching elements. Supports private tags.
 
+- `shift_date`: Shift a date value forward or backward by a number of days (val1). Positive values shift forward, negative values shift backward. Only works on tags with VR of 'DA' (Date) or 'DT' (DateTime). For DateTime fields, only the date portion is shifted while the time portion is preserved. If the tag doesn't exist, the value cannot be parsed as a date, or the VR is not a date type, no action is taken. Supports wildcard paths to operate on multiple matching elements.
+
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
-- `copy_from_tag`, `shift_date`, etc.
+- `copy_from_tag`, etc.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
 

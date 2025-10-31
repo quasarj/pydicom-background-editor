@@ -14,6 +14,12 @@ def make_test_dataset():
     ds.PatientName = "Test^Patient"
     ds.StudyInstanceUID = "1.2.840.12345.1"
     ds.ImageType = r"ORIGINAL\PRIMARY\AXIAL"
+    
+    # Add some date fields for testing
+    ds.StudyDate = "20241030"  # DA format: YYYYMMDD
+    ds.SeriesDate = "20241025"  # DA format
+    ds.ContentDate = "20241020"  # DA format
+    ds.AcquisitionDateTime = "20241030143055.123456"  # DT format: YYYYMMDDHHMMSS.FFFFFF
 
     # Private creator (0029,0010) for the group 0x0029
     ds.add_new(Tag(0x0029, 0x0010), 'LO', "INTELERAD MEDICAL SYSTEMS")

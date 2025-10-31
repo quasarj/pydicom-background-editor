@@ -252,3 +252,91 @@ class Editor:
                         new_value = truncate_value(op.val2, new_vr)
                         tag.element.value = new_value
             # If tag doesn't exist, do nothing (unlike set_tag or empty_tag)
+
+    def _op_shift_date(self, ds: Dataset, op: Operation):
+        """Shift a date value forward or backward by a number of days.
+        
+        Traverses to the target tag(s) and shifts date values by the number of days
+        specified in val1. Positive values shift forward, negative values shift backward.
+        Only works on tags with VR of 'DA' (Date) or 'DT' (DateTime).
+        If the tag doesn't exist or the value cannot be parsed as a date, no action is taken.
+        Works with both single tags and wildcard paths that match multiple elements.
+        
+        DICOM Date format (DA): YYYYMMDD
+        DICOM DateTime format (DT): YYYYMMDDHHMMSS.FFFFFF&ZZXX (but we only shift the date portion)
+        
+        Args:
+            ds: The DICOM dataset to modify
+            op: Operation containing tag path and val1 (number of days to shift, can be negative)
+        """
+        from datetime import datetime, timedelta
+        
+        parsed_path = parse(op.tag)
+        tags = traverse(ds, parsed_path)
+        
+        try:
+            days_to_shift = int(op.val1)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid days value for shift_date: {op.val1}")
+            return
+        
+        logger.debug(f"Shifting date tag {op.tag} by {days_to_shift} days")
+
+        for tag in tags:
+            if tag.element is None:
+                continue
+            
+            vr = tag.element.VR
+            
+            # Only process date-related VRs
+            if vr not in ('DA', 'DT'):
+                logger.warning(f"Tag {tag.element.tag} has VR {vr}, not a date type (DA or DT). Skipping.")
+                continue
+            
+            current_value = str(tag.element.value)
+            
+            try:
+                if vr == 'DA':
+                    # DICOM Date format: YYYYMMDD
+                    if len(current_value) < 8:
+                        logger.warning(f"Invalid DA format: {current_value}. Expected YYYYMMDD.")
+                        continue
+                    
+                    # Parse the date (take first 8 characters)
+                    date_str = current_value[:8]
+                    date_obj = datetime.strptime(date_str, '%Y%m%d')
+                    
+                    # Shift the date
+                    new_date = date_obj + timedelta(days=days_to_shift)
+                    
+                    # Format back to DICOM DA format
+                    new_value = new_date.strftime('%Y%m%d')
+                    
+                    # Preserve any additional characters after the date (though unusual for DA)
+                    if len(current_value) > 8:
+                        new_value += current_value[8:]
+                    
+                    tag.element.value = new_value
+                
+                elif vr == 'DT':
+                    # DICOM DateTime format: YYYYMMDDHHMMSS.FFFFFF&ZZXX
+                    # We only shift the date portion (first 8 characters)
+                    if len(current_value) < 8:
+                        logger.warning(f"Invalid DT format: {current_value}. Expected at least YYYYMMDD.")
+                        continue
+                    
+                    # Parse the date portion (first 8 characters)
+                    date_str = current_value[:8]
+                    date_obj = datetime.strptime(date_str, '%Y%m%d')
+                    
+                    # Shift the date
+                    new_date = date_obj + timedelta(days=days_to_shift)
+                    
+                    # Format back to DICOM format, preserving time and timezone info
+                    new_value = new_date.strftime('%Y%m%d') + current_value[8:]
+                    
+                    tag.element.value = new_value
+            
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Failed to parse or shift date value '{current_value}': {e}")
+                continue
