@@ -463,3 +463,233 @@ def test_empty_tag_private():
     res = traverse(ds, parse('<(0013,"CTP",10)>'))
     assert len(res) == 1
     assert res[0].element.value == ""
+
+
+def test_substitute_simple_match():
+    """Test substituting a value when it matches."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set up a tag with a known value
+    ds.StudyInstanceUID = "1.3.6.1.4.1.14519.5.2.1.12345"
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1="1.3.6.1.4.1.14519.5.2.1.12345",
+            val2="9.9.9.9.9.9.9.9.9",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.StudyInstanceUID == "9.9.9.9.9.9.9.9.9"
+
+
+def test_substitute_simple_no_match():
+    """Test that substitute doesn't change value when it doesn't match."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set up a tag with a known value
+    ds.StudyInstanceUID = "1.3.6.1.4.1.14519.5.2.1.12345"
+    original_value = ds.StudyInstanceUID
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0020,000d)>",  # StudyInstanceUID
+            val1="DIFFERENT_VALUE",
+            val2="9.9.9.9.9.9.9.9.9",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Value should remain unchanged
+    assert ds.StudyInstanceUID == original_value
+
+
+def test_substitute_missing_tag():
+    """Test that substitute handles missing tags gracefully (no error, no creation)."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use a tag that doesn't exist in the dataset
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0010,0030)>",  # PatientBirthDate - doesn't exist
+            val1="20000101",
+            val2="20100101",
+        )
+    ]
+
+    # Should not raise an error
+    editor.apply_edits(ds, operations)
+
+    # Tag should still not exist (unlike empty_tag or set_tag)
+    res = traverse(ds, parse("<(0010,0030)>"))
+    assert all(tag.element is None for tag in res)
+
+
+def test_substitute_nested_sequence():
+    """Test substituting a value in a nested sequence."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # The nested path has value "1.2.840.10008.5.1.4.1.1.128"
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0008,1115)[0](0008,114a)[0](0008,1150)>",
+            val1="1.2.840.10008.5.1.4.1.1.128",
+            val2="9.9.9.9.9",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Verify the substitution
+    res = traverse(ds, parse("<(0008,1115)[0](0008,114a)[0](0008,1150)>"))
+    assert len(res) == 1
+    assert res[0].element.value == "9.9.9.9.9"
+
+
+def test_substitute_wildcard():
+    """Test substituting with wildcard traversal affecting multiple elements."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use wildcard to substitute in all matching elements
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>",
+            val1="121322",
+            val2="999999",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Check that all 1000 elements were modified
+    res = traverse(ds, parse("<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"))
+    assert len(res) == 1000
+    for elem in res:
+        assert elem.element.value == "999999"
+
+
+def test_substitute_wildcard_no_match():
+    """Test that substitute with wildcard doesn't change non-matching values."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use wildcard but with a non-matching value
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>",
+            val1="NONEXISTENT",
+            val2="999999",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Check that no elements were modified (all still have original value "121322")
+    res = traverse(ds, parse("<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"))
+    assert len(res) == 1000
+    for elem in res:
+        assert elem.element.value == "121322"
+
+
+def test_substitute_multi_valued():
+    """Test that substitute works on multi-valued fields."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # ImageType is a multi-valued field (list) in pydicom
+    # Original value from make_test_dataset() is ['ORIGINAL', 'PRIMARY', 'AXIAL']
+    ds.ImageType = ['ORIGINAL', 'PRIMARY', 'ORIGINAL', 'AXIAL']
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0008,0008)>",  # ImageType
+            val1="ORIGINAL",
+            val2="MODIFIED",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Both occurrences of ORIGINAL should be replaced
+    assert ds.ImageType == ['MODIFIED', 'PRIMARY', 'MODIFIED', 'AXIAL']
+
+
+def test_substitute_multi_valued_no_match():
+    """Test that substitute on multi-valued field leaves non-matching values unchanged."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set up multi-valued field
+    ds.ImageType = ['ORIGINAL', 'PRIMARY', 'AXIAL']
+    original_value = list(ds.ImageType)
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag="<(0008,0008)>",  # ImageType
+            val1="NONEXISTENT",
+            val2="MODIFIED",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # No values should be changed
+    assert list(ds.ImageType) == original_value
+
+
+def test_substitute_private_tag():
+    """Test substituting a value in a private tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag='<(0013,"CTP",10)>',
+            val1="TCIA-Fake-Project",
+            val2="TCIA-Real-Project",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    res = traverse(ds, parse('<(0013,"CTP",10)>'))
+    assert len(res) == 1
+    assert res[0].element.value == "TCIA-Real-Project"
+
+
+def test_substitute_private_tag_no_match():
+    """Test that substitute on private tag doesn't change non-matching value."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="substitute",
+            tag='<(0013,"CTP",10)>',
+            val1="WRONG_VALUE",
+            val2="TCIA-Real-Project",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    res = traverse(ds, parse('<(0013,"CTP",10)>'))
+    assert len(res) == 1
+    assert res[0].element.value == "TCIA-Fake-Project"  # Unchanged

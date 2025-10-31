@@ -95,9 +95,11 @@ Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
 - `empty_tag`: Set the target tag's value to an empty string. If the tag doesn't exist, it will be created with an empty value. Works with both concrete paths and wildcard paths to operate on multiple matching elements. Supports private tags.
 
+- `substitute`: Conditionally replace the tag's value with val2 only if the current value exactly matches val1. If the tag doesn't exist or the value doesn't match, no action is taken. Works with both single-valued and multi-valued fields. Supports wildcard paths to operate on multiple matching elements. Supports private tags.
+
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
-- `substitute`, `copy_from_tag`, `shift_date`, etc.
+- `copy_from_tag`, `shift_date`, etc.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
 

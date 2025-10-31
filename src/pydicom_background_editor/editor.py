@@ -197,3 +197,58 @@ class Editor:
             else:
                 # the tag was not present in the dataset, so we must add it
                 add_tag(ds, parsed_path, "", new_vr)
+
+    def _op_substitute(self, ds: Dataset, op: Operation):
+        """Conditionally replace tag value only if it matches val1.
+        
+        Traverses to the target tag(s) and replaces the value with val2 only if
+        the current value exactly matches val1. If the tag doesn't exist or the
+        value doesn't match, no action is taken.
+        Works with both single tags and wildcard paths that match multiple elements.
+        Handles both single-valued and multi-valued DICOM fields.
+        
+        Args:
+            ds: The DICOM dataset to modify
+            op: Operation containing tag path, val1 (match value), and val2 (replacement)
+        """
+        parsed_path = parse(op.tag)
+        tags = traverse(ds, parsed_path)
+        logger.debug(f"Substituting tag {op.tag}: {op.val1} -> {op.val2}")
+
+        last_segment = parsed_path[-1]
+
+        if last_segment.is_private:
+            new_vr = datadict.private_dictionary_VR([last_segment.group, last_segment.element], last_segment.owner) # type: ignore
+        else:
+            new_vr = datadict.dictionary_VR([last_segment.group, last_segment.element]) # type: ignore
+
+        for tag in tags:
+            if tag.element is not None:
+                current_value = tag.element.value
+                
+                # Handle multi-valued fields (lists/MultiValue)
+                if isinstance(current_value, (list, MultiValue)):
+                    # Check if any value in the list matches val1
+                    # Replace matching values with val2
+                    new_list = []
+                    modified = False
+                    for v in current_value:
+                        if str(v) == op.val1:
+                            new_list.append(op.val2)
+                            modified = True
+                        else:
+                            new_list.append(v)
+                    
+                    if modified:
+                        # Preserve MultiValue type if original was MultiValue
+                        if isinstance(current_value, MultiValue):
+                            new_value = type(current_value)(str, new_list)
+                        else:
+                            new_value = new_list
+                        tag.element.value = new_value
+                else:
+                    # Single value - check for exact match
+                    if str(current_value) == op.val1:
+                        new_value = truncate_value(op.val2, new_vr)
+                        tag.element.value = new_value
+            # If tag doesn't exist, do nothing (unlike set_tag or empty_tag)
