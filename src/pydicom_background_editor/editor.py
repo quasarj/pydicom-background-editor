@@ -340,3 +340,131 @@ class Editor:
             except (ValueError, IndexError) as e:
                 logger.warning(f"Failed to parse or shift date value '{current_value}': {e}")
                 continue
+
+    def _op_copy_from_tag(self, ds: Dataset, op: Operation):
+        """Copy value from source tag to destination tag.
+        
+        Copies the value from the tag specified in val1 (source) to the tag specified
+        in op.tag (destination). If the source path matches multiple tags (via wildcards),
+        the value from the first matching tag is used. If the destination path matches
+        multiple tags, all matching destination tags receive the same copied value.
+        
+        The value is converted to match the destination tag's VR. If conversion fails,
+        an error is raised. If the source tag doesn't exist, no action is taken.
+        If the destination tag doesn't exist, it will be created.
+        
+        Args:
+            ds: The DICOM dataset to modify
+            op: Operation containing:
+                - tag: destination path
+                - val1: source tag path (in meta-quoted form like "<(0010,0010)>")
+                - val2: unused
+        """
+        # Parse and traverse the source path (val1)
+        source_path_str = op.val1
+        if not source_path_str:
+            logger.warning(f"copy_from_tag requires val1 to specify source tag path")
+            return
+        
+        # Strip meta-quotes from source path if present
+        if source_path_str.startswith("<") and source_path_str.endswith(">"):
+            source_path_str = source_path_str[1:-1]
+        
+        try:
+            source_parsed = parse(f"<{source_path_str}>")
+        except Exception as e:
+            logger.warning(f"Failed to parse source path '{source_path_str}': {e}")
+            return
+        
+        source_tags = traverse(ds, source_parsed)
+        
+        # Check if we found any source tags
+        valid_sources = [t for t in source_tags if t.element is not None]
+        if not valid_sources:
+            logger.warning(f"Source tag {source_path_str} not found, cannot copy")
+            return
+        
+        # Take the first matching source tag
+        source_tag = valid_sources[0]
+        source_value = source_tag.element.value
+        source_vr = source_tag.element.VR
+        
+        logger.debug(f"Copying from {source_path_str} (VR={source_vr}, value={source_value}) to {op.tag}")
+        
+        # Parse and traverse the destination path
+        dest_parsed = parse(op.tag)
+        dest_tags = traverse(ds, dest_parsed)
+        
+        # Determine the destination VR
+        dest_segment = dest_parsed[-1]
+        if dest_segment.is_private:
+            dest_vr = datadict.private_dictionary_VR([dest_segment.group, dest_segment.element], dest_segment.owner) # type: ignore
+        else:
+            dest_vr = datadict.dictionary_VR([dest_segment.group, dest_segment.element]) # type: ignore
+        
+        # Convert value to destination VR
+        try:
+            # Convert the value appropriately for the destination VR
+            converted_value = self._convert_value_for_vr(source_value, source_vr, dest_vr)
+        except Exception as e:
+            logger.error(f"Failed to convert value '{source_value}' from VR {source_vr} to {dest_vr}: {e}")
+            raise ValueError(f"Cannot convert value from VR {source_vr} to {dest_vr}") from e
+        
+        # Apply to all matching destination tags
+        for dest_tag in dest_tags:
+            if dest_tag.element is not None:
+                dest_tag.element.value = converted_value
+            else:
+                # Destination tag doesn't exist, create it
+                add_tag(ds, dest_parsed, converted_value, dest_vr)
+
+    def _convert_value_for_vr(self, value, source_vr: str, dest_vr: str):
+        """Convert a value from one VR to another.
+        
+        Attempts to convert a value from source VR to destination VR.
+        Handles common conversions and applies appropriate formatting.
+        
+        Args:
+            value: The value to convert (can be string, MultiValue, list, etc.)
+            source_vr: The source Value Representation
+            dest_vr: The destination Value Representation
+            
+        Returns:
+            The converted value appropriate for the destination VR
+            
+        Raises:
+            ValueError: If conversion is not possible
+        """
+        # If VRs are the same, just return the value (possibly as string)
+        if source_vr == dest_vr:
+            return value
+        
+        # Handle MultiValue - convert to string for processing
+        if isinstance(value, MultiValue):
+            # For multi-valued to single-valued, take first element
+            value_str = str(value[0]) if len(value) > 0 else ""
+        else:
+            value_str = str(value)
+        
+        # Most string-based VRs can convert to each other
+        string_vrs = {'AE', 'AS', 'CS', 'DA', 'DS', 'DT', 'IS', 'LO', 'LT', 
+                      'PN', 'SH', 'ST', 'TM', 'UC', 'UI', 'UR', 'UT'}
+        
+        if source_vr in string_vrs and dest_vr in string_vrs:
+            # Apply truncation for destination VR
+            return truncate_value(value_str, dest_vr)
+        
+        # Numeric conversions
+        if source_vr in {'DS', 'IS', 'FL', 'FD', 'SL', 'SS', 'UL', 'US'} and \
+           dest_vr in {'DS', 'IS', 'FL', 'FD', 'SL', 'SS', 'UL', 'US'}:
+            # Numeric types can generally convert between each other
+            return value_str
+        
+        # Date/Time conversions
+        if source_vr in {'DA', 'DT', 'TM'} and dest_vr in {'DA', 'DT', 'TM'}:
+            return value_str
+        
+        # If we get here, try a generic string conversion
+        # This may work for some cases but could fail
+        logger.warning(f"Attempting generic conversion from VR {source_vr} to {dest_vr}")
+        return truncate_value(value_str, dest_vr)

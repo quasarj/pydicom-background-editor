@@ -915,3 +915,287 @@ def test_shift_date_zero_days():
 
     # Value should remain the same
     assert ds.StudyDate == original_value
+
+
+def test_copy_from_tag_simple():
+    """Test simple copy from one tag to another."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Copy PatientName to another tag
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0020)>",  # PatientID (destination)
+            val1="<(0010,0010)>",  # PatientName (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # PatientID should now have the value from PatientName
+    assert ds.PatientID == ds.PatientName
+
+
+def test_copy_from_tag_same_vr():
+    """Test copying between tags with the same VR."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Copy StudyDate to SeriesDate (both are DA)
+    original_study_date = ds.StudyDate
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0008,0021)>",  # SeriesDate (destination)
+            val1="<(0008,0020)>",  # StudyDate (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.SeriesDate == original_study_date
+
+
+def test_copy_from_tag_vr_conversion():
+    """Test copying with VR conversion (UI to LO)."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Copy StudyInstanceUID (UI) to a LO field
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (LO) (destination)
+            val1="<(0020,000d)>",  # StudyInstanceUID (UI) (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.PatientName == ds.StudyInstanceUID
+
+
+def test_copy_from_tag_wildcard_source_first_match():
+    """Test that wildcard in source uses first matching tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Use wildcard in source - should take first match
+    # The nested path has 1000 elements all with value "121322"
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (destination)
+            val1="<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>",
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.PatientName == "121322"
+
+
+def test_copy_from_tag_wildcard_dest_all_updated():
+    """Test that wildcard in destination updates all matching tags."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Set PatientName to a known value
+    ds.PatientName = "TestValue"
+
+    # Copy to all matching wildcard destinations
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>",
+            val1="<(0010,0010)>",  # PatientName (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Check that all 1000 elements were updated
+    res = traverse(ds, parse("<(5200,9230)[<0>](0008,9124)[<0>](0008,2112)[<0>](0040,a170)[<0>](0008,0100)>"))
+    assert len(res) == 1000
+    for elem in res:
+        assert elem.element.value == "TestValue"
+
+
+def test_copy_from_tag_missing_source():
+    """Test that copy_from_tag handles missing source gracefully."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    original_value = ds.PatientName
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (destination)
+            val1="<(0010,0030)>",  # PatientBirthDate (doesn't exist)
+            val2="",
+        )
+    ]
+
+    # Should not raise an error
+    editor.apply_edits(ds, operations)
+
+    # PatientName should remain unchanged
+    assert ds.PatientName == original_value
+
+
+def test_copy_from_tag_missing_dest_creates():
+    """Test that copy_from_tag creates destination tag if it doesn't exist."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0030)>",  # PatientBirthDate (doesn't exist)
+            val1="<(0008,0020)>",  # StudyDate (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # PatientBirthDate should now exist with StudyDate's value
+    assert ds.PatientBirthDate == ds.StudyDate
+
+
+def test_copy_from_tag_nested_sequence():
+    """Test copying from nested sequence to top-level tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (destination)
+            val1="<(0008,1115)[0](0008,114a)[0](0008,1150)>",  # Nested UI
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Verify the copy
+    res = traverse(ds, parse("<(0008,1115)[0](0008,114a)[0](0008,1150)>"))
+    expected_value = res[0].element.value
+    assert ds.PatientName == expected_value
+
+
+def test_copy_from_tag_private_tag():
+    """Test copying from a private tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (destination)
+            val1='<(0013,"CTP",10)>',  # Private tag (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    res = traverse(ds, parse('<(0013,"CTP",10)>'))
+    expected_value = res[0].element.value
+    assert ds.PatientName == expected_value
+
+
+def test_copy_from_tag_to_private_tag():
+    """Test copying to a private tag."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    ds.PatientName = "TestPatient"
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag='<(0013,"CTP",11)>',  # Private tag (destination)
+            val1="<(0010,0010)>",  # PatientName (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    res = traverse(ds, parse('<(0013,"CTP",11)>'))
+    assert res[0].element.value == "TestPatient"
+
+
+def test_copy_from_tag_empty_source_val1():
+    """Test that copy_from_tag handles empty val1 gracefully."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    original_value = ds.PatientName
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0010)>",  # PatientName (destination)
+            val1="",  # Empty source path
+            val2="",
+        )
+    ]
+
+    # Should not raise an error
+    editor.apply_edits(ds, operations)
+
+    # PatientName should remain unchanged
+    assert ds.PatientName == original_value
+
+
+def test_copy_from_tag_with_metaquotes():
+    """Test that copy_from_tag handles meta-quoted source paths."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0010,0020)>",  # PatientID (destination)
+            val1="<(0010,0010)>",  # PatientName (source) - already has meta-quotes
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    assert ds.PatientID == ds.PatientName
+
+
+def test_copy_from_tag_truncates_for_vr():
+    """Test that long values are truncated to fit destination VR."""
+    ds = make_test_dataset()
+    editor = Editor()
+
+    # Create a very long value (SH has max 16 chars)
+    ds.StudyInstanceUID = "1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0"  # Much longer than SH allows
+
+    operations = [
+        Operation(
+            op="copy_from_tag",
+            tag="<(0008,0050)>",  # AccessionNumber (SH - max 16 chars) (destination)
+            val1="<(0020,000d)>",  # StudyInstanceUID (source)
+            val2="",
+        )
+    ]
+
+    editor.apply_edits(ds, operations)
+
+    # Value should be truncated to 16 chars
+    assert len(ds.AccessionNumber) <= 16

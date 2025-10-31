@@ -99,9 +99,11 @@ Implemented in `Editor` (`src/pydicom_background_editor/editor.py`):
 
 - `shift_date`: Shift a date value forward or backward by a number of days (val1). Positive values shift forward, negative values shift backward. Only works on tags with VR of 'DA' (Date) or 'DT' (DateTime). For DateTime fields, only the date portion is shifted while the time portion is preserved. If the tag doesn't exist, the value cannot be parsed as a date, or the VR is not a date type, no action is taken. Supports wildcard paths to operate on multiple matching elements.
 
+- `copy_from_tag`: Copy the value from a source tag (specified in val1) to the destination tag(s). If the source path matches multiple tags (via wildcards), the first matching tag's value is used. If the destination path matches multiple tags, all receive the same copied value. The value is converted to match the destination tag's VR (e.g., UI→LO, DA→DA). If the source tag doesn't exist, no action is taken. If the destination tag doesn't exist, it will be created. Raises ValueError if VR conversion is not possible. Supports both public and private tags.
+
 Planned/obvious follow-ons (outlined in `main.py` comments and historical background editor notes):
 
-- `copy_from_tag`, etc.
+- Additional operations as needed.
 
 When adding an operation, create a method named `_op_<opname>(ds, op)` on `Editor`.
 
