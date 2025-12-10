@@ -81,8 +81,9 @@ def add_tag(ds: Dataset, parsed_path: Path, value: str, vr: str | None = None) -
 
 
 def parse(path: str) -> Path:
-    if not (path.startswith("<") and path.endswith(">")):
-        raise ValueError("Path is missing Bills; it looks invalid")
+    ## TODO: disabled for now, looks like we need to handle both cases
+    # if not (path.startswith("<") and path.endswith(">")):
+    #     raise ValueError("Path is missing Bills; it looks invalid")
 
     path = path.strip("<>")
 

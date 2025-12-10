@@ -10,7 +10,11 @@
             "request": "launch",
             "module": "pydicom_background_editor.main",
             "console": "integratedTerminal",
-            "python": "${workspaceFolder}/.venv/bin/python" // Adjust path if your uv venv is elsewhere
+            "python": "${workspaceFolder}/.venv/bin/python", // Adjust path if your uv venv is elsewhere
+            "args": [
+                "very_simple_real.csv",
+                "1550" // Example activity_id
+            ]
         },
         {
             "name": "Python: Pytest",

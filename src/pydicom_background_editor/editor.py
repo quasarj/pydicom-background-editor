@@ -82,6 +82,24 @@ class Operation():
             val1=Operation._strip_metaquotes(row["val1"]),
             val2=Operation._strip_metaquotes(row["val2"]),
         )
+    
+    @staticmethod
+    def translate_edits(raw_edits: list[dict]) -> list["Operation"]:
+        operations = []
+        for edit in raw_edits:
+            ## TODO probably need to support other modes, but for now this is it
+            if edit['tag_mode'] != 'exact':
+                raise NotImplementedError(f"Unsupported tag_mode: {edit['tag_mode']}")
+
+            operation = Operation(
+                op=edit["op"],
+                tag=edit["tag"],
+                val1=edit["arg1"],
+                val2=edit["arg2"]
+            )
+            operations.append(operation)
+
+        return operations
 
 class Editor:
     def __init__(self):
