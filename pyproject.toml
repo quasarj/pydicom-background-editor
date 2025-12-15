@@ -8,14 +8,12 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "ipython>=9.6.0",
     "pydicom>=3.0.1",
-    "pytest-cov>=7.0.0",
 ]
 
 [project.scripts]
-main = "pydicom_background_editor.main:main"
-test = "pydicom_background_editor.main:test"
+pydicom-background-editor = "pydicom_background_editor.main:main"
+pydicom-background-editor-test = "pydicom_background_editor.main:test"
 
 [build-system]
 requires = ["hatchling"]
@@ -24,4 +22,5 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
+    "pytest-cov>=7.0.0",
 ]

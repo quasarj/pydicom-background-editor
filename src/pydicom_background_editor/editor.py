@@ -122,6 +122,8 @@ class Editor:
 
     def _op_set_tag(self, ds: Dataset, op: Operation):
         # use traverse_path to find the actual tag to edit
+        from pydicom.sequence import Sequence as PydicomSequence
+        
         parsed_path = parse(op.tag)
         tags = traverse(ds, parsed_path)
         logger.debug(f"Setting tag {op.tag} to {op.val1}")
@@ -129,18 +131,50 @@ class Editor:
         last_segment = parsed_path[-1]
 
         if last_segment.is_private:
-            new_value = op.val1
             new_vr = datadict.private_dictionary_VR([last_segment.group, last_segment.element], last_segment.owner) # type: ignore
+            # Handle sequence VR specially
+            if new_vr == 'SQ' and (op.val1 == "" or op.val1 is None):
+                new_value = PydicomSequence([])
+            else:
+                new_value = op.val1
         else:
             new_vr = datadict.dictionary_VR([last_segment.group, last_segment.element]) # type: ignore
-            new_value = truncate_value(op.val1, new_vr)
-
-        for tag in tags:
-            if tag is not None and tag.element is not None:
-                tag.element.value = new_value
+            # Handle sequence VR specially
+            if new_vr == 'SQ' and (op.val1 == "" or op.val1 is None):
+                new_value = PydicomSequence([])
             else:
-                # the tag was not present in the dataset, so we must add it
-                add_tag(ds, parsed_path, new_value, new_vr)
+                new_value = truncate_value(op.val1, new_vr)
+
+        # If tags is empty, the tag doesn't exist and needs to be added
+        if not tags:
+            # Need to find the parent location(s) where we should add the tag
+            # Make a copy of the path to avoid mutation issues
+            parent_path = parse(op.tag)
+            parent_path.pop()  # Remove the last segment (the tag to add)
+            
+            # If parent_path is empty, add to root
+            if not parent_path:
+                add_tag(ds, parse(op.tag), new_value, new_vr)
+            else:
+                # Traverse to parent location(s)
+                parent_locs = traverse(ds, parent_path)
+                
+                # Add the tag at each parent location
+                for parent in parent_locs:
+                    if parent.element is not None:
+                        parent.element.add_new((last_segment.group, last_segment.element), new_vr, new_value)
+                
+                # If no parents found, try add_tag as a fallback
+                if not parent_locs:
+                    add_tag(ds, parse(op.tag), new_value, new_vr)
+        else:
+            for tag in tags:
+                if tag is not None and tag.element is not None:
+                    tag.element.value = new_value
+                else:
+                    # the tag was not present in the dataset, so we must add it
+                    # Make a fresh copy of the path to avoid mutation issues
+                    add_tag(ds, parse(op.tag), new_value, new_vr)
 
     def _op_string_replace(self, ds: Dataset, op: Operation):
         """Replace substring in tag value(s).
