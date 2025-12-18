@@ -2,6 +2,7 @@
 Background Editor using pydicom
 """
 
+import sys
 import logging
 from collections import defaultdict
 import csv
@@ -11,6 +12,7 @@ import argparse
 import pydicom
 
 from .editor import Editor, Operation
+from .input import get_input_data, respond_ok, respond_error
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -25,7 +27,7 @@ def parse_args():
 
     return args
 
-def main() -> None:
+def main_old() -> None:
     """CLI entrypoint: read CSV of edits and group them by Series Instance UID.
     """
     args = parse_args()
@@ -76,7 +78,6 @@ def main() -> None:
 
         ds.save_as("files/output.dcm")
 
-
 def generate_edit_groups(reader):
     series_list = []
     op_list = []
@@ -98,7 +99,6 @@ def generate_edit_groups(reader):
     if series_list or op_list:
         yield series_list, op_list
 
-
 def test2():
     files = [
         "/Users/quasar/Documents/DICOM/pathology/a3e6a5cc1bfbeda4bb229fa728486259",
@@ -108,7 +108,7 @@ def test2():
         ds = pydicom.dcmread(file, stop_before_pixels=True)
         pprint(ds)
 
-def get_input_data():
+def get_input_data_test():
     ## example/fake data that would be read from stdin storable
     data = {
         "edits": [
@@ -312,6 +312,35 @@ def test():
 
     # print(ds)
 
+def main() -> None:
+
+    if sys.argv[1:]:
+        print(__doc__)
+        sys.exit(1)
+
+    # print("Testing input from stdin, in storable format. Waiting up to 15 seconds to get data...")
+    edits = get_input_data()
+    # print("Raw edits:")
+    # pprint(edits)
+
+    operations = Operation.translate_edits(edits["edits"])
+    from_file = edits["from_file"]
+    to_file = edits["to_file"]
+
+    editor = Editor()
+
+    # print("Edits translated to Operations:")
+    # pprint(operations)
+
+    print("Editing begins now...")
+    ds = pydicom.dcmread(from_file, defer_size=1024)
+    editor.apply_edits(ds, operations)
+    ds.save_as(to_file)
+
+    respond_ok({
+        "to_file": to_file,
+        "from_file": from_file,
+    })
 
 
 if __name__ == "__main__":
